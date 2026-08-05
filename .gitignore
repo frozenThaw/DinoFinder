@@ -1,0 +1,51 @@
+# Local image data and application state
+.similar_finder/
+SourceImage/
+TargetImage/
+Output/
+
+# Dependencies and generated packages
+.deps/
+vcpkg_installed/
+build/
+dist/
+
+# CMake and native build artifacts
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+CTestTestfile.cmake
+Testing/
+cmake_install.cmake
+compile_commands.json
+install_manifest.txt
+*.ninja
+.ninja_*
+
+# Visual Studio, Qt Creator, and other IDE state
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.user.*
+*.VC.db
+*.VC.VC.opendb
+
+# Python development caches (not part of the native release)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*~
+
+# Windows metadata
+Thumbs.db
+Desktop.ini
+aqtinstall.log

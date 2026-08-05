@@ -1,0 +1,5 @@
+torch>=2.4,<3
+transformers>=4.42,<6
+faiss-cpu>=1.8,<2
+pillow>=10,<13
+numpy>=1.26,<3

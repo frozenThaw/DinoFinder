@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "similarfinder",
+  "version-string": "1.0.0",
+  "builtin-baseline": "f1d4bbc72f183441403ba5107cb19d75a5abc2a2",
+  "dependencies": [
+    "eigen3",
+    "faiss",
+    {
+      "name": "opencv4",
+      "default-features": false,
+      "features": [
+        "jpeg",
+        "png",
+        "tiff",
+        "webp"
+      ]
+    }
+  ]
+}
