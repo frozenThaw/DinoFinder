@@ -1,18 +1,20 @@
-# SimilarFinder
+# DinoFinder
 
-SimilarFinder is a native Windows image-search application built with C++20, Qt 6, OpenCV, DINOv2 through ONNX Runtime CUDA, and FAISS HNSW. The packaged application does not require Python, PyTorch, or a locally installed CUDA Toolkit.
+![DinoFinder Result](Result.png)
+
+DinoFinder is a native Windows image-search application built with C++20, Qt 6, OpenCV, DINOv2 through ONNX Runtime CUDA, and FAISS HNSW. The packaged application does not require Python, PyTorch, or a locally installed CUDA Toolkit.
 
 ## Application workflow
 
-1. Start `SimilarFinder.exe`.
+1. Start `DinoFinder.exe`.
 2. Select `Choose Directory`, then select `Build` to create the catalog.
-3. Select `Choose Image` or drag an image into the window.
+3. Select `Choose Image`, use `Paste Image`, or drag an image into the window. The search starts automatically.
 4. Adjust `Similar Value` and `Top Num` as needed.
 5. Double-click a result to open it, or right-click to show it in Explorer or copy its path.
 
 The default similarity threshold is `0.80`. Only results with cosine similarity greater than or equal to that value are displayed. `Top Num` defaults to `200` and is an upper limit; the application does not add lower-scoring results to fill the list.
 
-Catalog data is stored below `%LOCALAPPDATA%\SimilarFinder\catalogs`. Source directories remain read-only. Rebuilding the same directory performs an incremental sync and detects new, modified, and deleted files. Interrupted builds resume from their latest durable checkpoint.
+Catalog data is stored below `%LOCALAPPDATA%\DinoFinder\catalogs`. Source directories remain read-only. Rebuilding the same directory performs an incremental sync and detects new, modified, and deleted files. Interrupted builds resume from their latest durable checkpoint.
 
 ## Runtime behavior
 
@@ -36,6 +38,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap_dependen
   -Python C:\Path\To\python.exe
 
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
+
+# Build and test the CPU-only binary
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -CpuOnly
 ```
 
 The bootstrap installs Qt 6.8.3 and ONNX Runtime GPU 1.22 under `.deps`, and uses vcpkg for OpenCV, FAISS, Eigen, and their native dependencies.
@@ -56,11 +61,14 @@ Download the pinned NVIDIA redistributables, then build the package:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap_cuda_redist.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1
+
+# Build the CPU-only portable package (CUDA redistributables are not required)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1 -CpuOnly
 ```
 
 The CUDA bootstrap downloads official NVIDIA CUDA 12.8.1, cuBLAS 12.8, cuFFT 11.3, and cuDNN 9.8 archives and validates their SHA-256 values. `CUDA_REDIST_ROOT` can override the generated `.deps\cuda-redist\bin` directory.
 
-The package script builds and tests Release mode, runs `windeployqt`, copies ONNX Runtime, vcpkg and NVIDIA runtime DLLs, installs the ONNX model, emits SHA-256 checksums, and creates `dist\SimilarFinder-windows-x64.zip`. Python files and environments are not copied.
+The package script builds and tests Release mode, runs `windeployqt`, installs the ONNX model, and emits SHA-256 checksums. The default CUDA package is written to `dist\DinoFinder-windows-x64.zip`. Passing `-CpuOnly` creates `dist\DinoFinder-windows-x64-cpu.zip` without CUDA, cuDNN, or optional ONNX Runtime provider DLLs. Python files and environments are not copied.
 
 ## Project layout
 

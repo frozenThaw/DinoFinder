@@ -17,6 +17,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QImageReader>
 #include <QLabel>
 #include <QLineEdit>
@@ -29,9 +30,11 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSet>
+#include <QSizePolicy>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
@@ -127,42 +130,60 @@ void MainWindow::buildUi() {
     auto* queryLayout = new QHBoxLayout(queryBox);
     queryPreview_ = new QLabel(QStringLiteral("Drop an image here"));
     queryPreview_->setAlignment(Qt::AlignCenter);
-    queryPreview_->setFixedSize(148, 118);
+    queryPreview_->setMinimumSize(300, 180);
+    queryPreview_->setFixedHeight(180);
+    queryPreview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     queryPreview_->setObjectName(QStringLiteral("queryPreview"));
-    queryLayout->addWidget(queryPreview_);
+    queryLayout->addWidget(queryPreview_, 1);
+
+    auto* querySidePanel = new QWidget();
+    querySidePanel->setFixedSize(480, 180);
+    auto* querySideLayout = new QVBoxLayout(querySidePanel);
+    querySideLayout->setContentsMargins(0, 0, 0, 0);
+    querySideLayout->setSpacing(8);
 
     auto* queryButtons = new QVBoxLayout();
+    queryButtons->setSpacing(8);
     chooseImageButton_ = new QPushButton(QStringLiteral("Choose Image"));
-    searchButton_ = new QPushButton(QStringLiteral("Search"));
-    searchButton_->setEnabled(false);
-    queryButtons->addWidget(chooseImageButton_);
-    queryButtons->addWidget(searchButton_);
-    queryButtons->addStretch();
-    queryLayout->addLayout(queryButtons);
+    chooseImageButton_->setFixedWidth(140);
+    pasteImageButton_ = new QPushButton(QStringLiteral("Paste Image"));
+    pasteImageButton_->setFixedWidth(140);
+    queryButtons->addWidget(chooseImageButton_, 0, Qt::AlignLeft);
+    queryButtons->addWidget(pasteImageButton_, 0, Qt::AlignLeft);
+    querySideLayout->addLayout(queryButtons);
 
-    auto* controls = new QGridLayout();
+    auto* controlsPanel = new QWidget();
+    controlsPanel->setObjectName(QStringLiteral("queryControls"));
+    controlsPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* controls = new QGridLayout(controlsPanel);
+    controls->setContentsMargins(14, 12, 14, 12);
+    controls->setHorizontalSpacing(10);
+    controls->setVerticalSpacing(14);
     controls->setColumnStretch(1, 1);
     similaritySlider_ = new QSlider(Qt::Horizontal);
-    similaritySlider_->setRange(0, 100);
+    similaritySlider_->setRange(50, 100);
     similaritySlider_->setValue(80);
     similaritySpin_ = new QDoubleSpinBox();
-    similaritySpin_->setRange(0.0, 1.0);
+    similaritySpin_->setRange(0.50, 1.0);
     similaritySpin_->setSingleStep(0.01);
     similaritySpin_->setDecimals(2);
     similaritySpin_->setValue(0.80);
+    similaritySpin_->setFixedWidth(82);
     topSlider_ = new QSlider(Qt::Horizontal);
     topSlider_->setRange(1, 1000);
     topSlider_->setValue(200);
     topSpin_ = new QSpinBox();
     topSpin_->setRange(1, 1000);
     topSpin_->setValue(200);
+    topSpin_->setFixedWidth(82);
     controls->addWidget(new QLabel(QStringLiteral("Similar Value")), 0, 0);
     controls->addWidget(similaritySlider_, 0, 1);
     controls->addWidget(similaritySpin_, 0, 2);
     controls->addWidget(new QLabel(QStringLiteral("Top Num")), 1, 0);
     controls->addWidget(topSlider_, 1, 1);
     controls->addWidget(topSpin_, 1, 2);
-    queryLayout->addLayout(controls, 1);
+    querySideLayout->addWidget(controlsPanel);
+    queryLayout->addWidget(querySidePanel);
     root->addWidget(queryBox);
 
     auto* resultHeader = new QHBoxLayout();
@@ -199,6 +220,7 @@ void MainWindow::buildUi() {
         QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; font-weight: 600; }
         QLabel#providerBadge { color: #087f5b; font-weight: 600; padding: 4px 8px; border: 1px solid #9dd5c4; background: #eef8f4; }
         QLabel#queryPreview { border: 1px dashed #adb5ba; background: #f5f7f7; color: #687077; }
+        QWidget#queryControls { border: 1px solid #dfe3e6; background: #fafbfb; }
         QProgressBar { height: 8px; border: 0; background: #e8ebed; }
         QProgressBar::chunk { background: #087f5b; }
         QListView { border: 0; border-top: 1px solid #dfe3e6; outline: 0; }
@@ -212,7 +234,7 @@ void MainWindow::connectUi() {
     connect(searchDebounce_, &QTimer::timeout, this, &MainWindow::startSearch);
     connect(chooseDirectoryButton_, &QPushButton::clicked, this, &MainWindow::chooseDirectory);
     connect(chooseImageButton_, &QPushButton::clicked, this, &MainWindow::chooseImage);
-    connect(searchButton_, &QPushButton::clicked, this, &MainWindow::startSearch);
+    connect(pasteImageButton_, &QPushButton::clicked, this, &MainWindow::pasteImage);
     connect(buildButton_, &QPushButton::clicked, this, [this]() {
         setBusy(true, true);
         QMetaObject::invokeMethod(service_, &sf::SimilarityService::buildCatalog, Qt::QueuedConnection);
@@ -249,12 +271,14 @@ void MainWindow::connectUi() {
         catalogReadOnly_ = summary.readOnly;
         buildButton_->setText(summary.imageCount > 0 ? QStringLiteral("Sync") : QStringLiteral("Build"));
         buildButton_->setEnabled(!summary.readOnly);
-        searchButton_->setEnabled(catalogBuilt_ && !queryPath_.isEmpty());
         statusBar()->showMessage(
             QStringLiteral("%1 images, %2 vectors%3")
                 .arg(summary.imageCount)
                 .arg(summary.activeVectorCount)
                 .arg(summary.readOnly ? QStringLiteral(" · read-only") : QString()));
+        if (catalogBuilt_ && !queryPath_.isEmpty()) {
+            startSearch();
+        }
     });
     connect(service_, &sf::SimilarityService::buildProgress, this, [this](const sf::BuildProgress& progress) {
         const int percent = progress.total > 0
@@ -274,10 +298,12 @@ void MainWindow::connectUi() {
             setBusy(false, false);
             catalogBuilt_ = summary.activeVectorCount > 0;
             buildButton_->setText(summary.imageCount > 0 ? QStringLiteral("Sync") : QStringLiteral("Build"));
-            searchButton_->setEnabled(catalogBuilt_ && !queryPath_.isEmpty());
             progressLabel_->setText(cancelled ? QStringLiteral("Build paused") : QStringLiteral("Build complete"));
             statusBar()->showMessage(
                 QStringLiteral("%1 images, %2 vectors").arg(summary.imageCount).arg(summary.activeVectorCount));
+            if (!cancelled && catalogBuilt_ && !queryPath_.isEmpty()) {
+                startSearch();
+            }
         });
     connect(service_, &sf::SimilarityService::searchCompleted, this,
         [this](const QString&, const QVector<sf::SearchResult>& results, const qint64 elapsed) {
@@ -328,7 +354,6 @@ void MainWindow::chooseDirectory() {
     directoryEdit_->setText(QDir::cleanPath(directory));
     catalogBuilt_ = false;
     buildButton_->setEnabled(false);
-    searchButton_->setEnabled(false);
     QMetaObject::invokeMethod(service_, [this, directory]() {
         service_->openDirectory(directory);
     }, Qt::QueuedConnection);
@@ -345,6 +370,50 @@ void MainWindow::chooseImage() {
     }
 }
 
+void MainWindow::pasteImage() {
+    const QClipboard* clipboard = QApplication::clipboard();
+    const QImage image = clipboard->image();
+    if (!image.isNull()) {
+        if (!clipboardDirectory_) {
+            clipboardDirectory_ = std::make_unique<QTemporaryDir>(
+                QDir(QDir::tempPath()).filePath(QStringLiteral("SimilarFinder-clipboard-XXXXXX")));
+        }
+        if (!clipboardDirectory_->isValid()) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Paste failed"),
+                QStringLiteral("Cannot create a temporary directory for the clipboard image."));
+            clipboardDirectory_.reset();
+            return;
+        }
+        const QString path = QDir(clipboardDirectory_->path()).filePath(
+            QStringLiteral("clipboard-query-%1.png").arg(++clipboardImageSequence_));
+        if (!image.save(path, "PNG")) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Paste failed"),
+                QStringLiteral("Cannot save the clipboard image."));
+            return;
+        }
+        setQueryImage(path);
+        return;
+    }
+
+    const QMimeData* mimeData = clipboard->mimeData();
+    if (mimeData != nullptr && mimeData->hasUrls()) {
+        for (const QUrl& url : mimeData->urls()) {
+            if (url.isLocalFile() && isSupportedImage(url.toLocalFile())) {
+                setQueryImage(url.toLocalFile());
+                return;
+            }
+        }
+    }
+    QMessageBox::information(
+        this,
+        QStringLiteral("No image to paste"),
+        QStringLiteral("The clipboard does not contain a supported image."));
+}
+
 void MainWindow::setQueryImage(const QString& path) {
     if (!isSupportedImage(path)) {
         QMessageBox::warning(this, QStringLiteral("Unsupported image"), QStringLiteral("Choose a supported image file."));
@@ -357,7 +426,6 @@ void MainWindow::setQueryImage(const QString& path) {
     const QImage preview = reader.read();
     queryPreview_->setPixmap(QPixmap::fromImage(preview));
     queryPreview_->setToolTip(queryPath_);
-    searchButton_->setEnabled(catalogBuilt_);
     if (catalogBuilt_) {
         startSearch();
     }
@@ -382,7 +450,7 @@ void MainWindow::setBusy(const bool busy, const bool building) {
     buildButton_->setEnabled(!busy && !catalogReadOnly_ && !directoryEdit_->text().isEmpty());
     cancelButton_->setEnabled(busy && building);
     chooseImageButton_->setEnabled(!building);
-    searchButton_->setEnabled(!busy && catalogBuilt_ && !queryPath_.isEmpty());
+    pasteImageButton_->setEnabled(!building);
     similaritySlider_->setEnabled(!busy);
     similaritySpin_->setEnabled(!busy);
     topSlider_->setEnabled(!busy);

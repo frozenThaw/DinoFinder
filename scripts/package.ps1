@@ -1,19 +1,23 @@
 param(
     [string]$DependencyRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) '.deps'),
-    [string]$CudaRedistRoot = $env:CUDA_REDIST_ROOT
+    [string]$CudaRedistRoot = $env:CUDA_REDIST_ROOT,
+    [string]$StageName,
+    [switch]$CpuOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $dependencyRoot = [IO.Path]::GetFullPath($DependencyRoot)
 . (Join-Path $dependencyRoot 'deps-env.ps1')
-if (-not $CudaRedistRoot) {
-    $CudaRedistRoot = Join-Path $dependencyRoot 'cuda-redist\bin'
+if (-not $CpuOnly) {
+    if (-not $CudaRedistRoot) {
+        $CudaRedistRoot = Join-Path $dependencyRoot 'cuda-redist\bin'
+    }
+    if (-not (Test-Path -LiteralPath $CudaRedistRoot)) {
+        throw 'CUDA redistributables are missing. Run scripts\bootstrap_cuda_redist.ps1 first or set CUDA_REDIST_ROOT.'
+    }
 }
-if (-not (Test-Path -LiteralPath $CudaRedistRoot)) {
-    throw 'CUDA redistributables are missing. Run scripts\bootstrap_cuda_redist.ps1 first or set CUDA_REDIST_ROOT.'
-}
-& (Join-Path $PSScriptRoot 'build.ps1') -DependencyRoot $dependencyRoot
+& (Join-Path $PSScriptRoot 'build.ps1') -DependencyRoot $dependencyRoot -CpuOnly:$CpuOnly
 
 $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
 $vsPath = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -22,12 +26,19 @@ if (-not $vsPath) {
 }
 $cmake = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
 
-$stage = Join-Path $projectRoot 'dist\SimilarFinder'
+$buildName = if ($CpuOnly) { 'windows-msvc-cpu' } else { 'windows-msvc' }
+if (-not $StageName) {
+    $StageName = if ($CpuOnly) { 'SimilarFinder-CPU' } else { 'SimilarFinder' }
+}
+if ($StageName -notmatch '^[A-Za-z0-9._-]+$') {
+    throw 'StageName may contain only letters, numbers, dots, underscores, and hyphens.'
+}
+$stage = Join-Path $projectRoot ("dist\" + $StageName)
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
-& $cmake --install (Join-Path $projectRoot 'build\windows-msvc') --prefix $stage --config Release
+& $cmake --install (Join-Path $projectRoot ("build\" + $buildName)) --prefix $stage --config Release
 if ($LASTEXITCODE -ne 0) { throw "CMake install failed with exit code $LASTEXITCODE" }
 & (Join-Path $env:QT_ROOT 'bin\windeployqt.exe') --release --no-translations --no-compiler-runtime (Join-Path $stage 'SimilarFinder.exe')
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
@@ -60,11 +71,17 @@ if ($windowsSdkBin) {
     }
 }
 
-Copy-Item -Path (Join-Path $env:ONNXRUNTIME_ROOT 'lib\*.dll') -Destination $stage -Force
+Copy-Item -LiteralPath (Join-Path $env:ONNXRUNTIME_ROOT 'lib\onnxruntime.dll') -Destination $stage -Force
+if (-not $CpuOnly) {
+    Copy-Item -LiteralPath (Join-Path $env:ONNXRUNTIME_ROOT 'lib\onnxruntime_providers_shared.dll') -Destination $stage -Force
+    Copy-Item -LiteralPath (Join-Path $env:ONNXRUNTIME_ROOT 'lib\onnxruntime_providers_cuda.dll') -Destination $stage -Force
+}
 Copy-Item -Path (Join-Path $projectRoot 'vcpkg_installed\x64-windows\bin\*.dll') -Destination $stage -Force
 
-Get-ChildItem -LiteralPath $CudaRedistRoot -Filter '*.dll' -File -Recurse | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $stage -Force
+if (-not $CpuOnly) {
+    Get-ChildItem -LiteralPath $CudaRedistRoot -Filter '*.dll' -File -Recurse | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $stage -Force
+    }
 }
 
 $licenseDirectory = Join-Path $stage 'licenses'
@@ -80,13 +97,15 @@ Get-ChildItem -LiteralPath $vcpkgShareRoot -Directory | ForEach-Object {
         Copy-Item -LiteralPath $copyright -Destination (Join-Path $licenseDirectory ($_.Name + '-copyright.txt'))
     }
 }
-$cudaLicenseRoot = Join-Path (Split-Path -Parent $CudaRedistRoot) 'licenses'
-if (Test-Path -LiteralPath $cudaLicenseRoot) {
-    Copy-Item -Path (Join-Path $cudaLicenseRoot '*') -Destination $licenseDirectory -Force
-}
-$cudaManifest = Join-Path (Split-Path -Parent $CudaRedistRoot) 'manifest.json'
-if (Test-Path -LiteralPath $cudaManifest) {
-    Copy-Item -LiteralPath $cudaManifest -Destination (Join-Path $licenseDirectory 'NVIDIA-redist-manifest.json')
+if (-not $CpuOnly) {
+    $cudaLicenseRoot = Join-Path (Split-Path -Parent $CudaRedistRoot) 'licenses'
+    if (Test-Path -LiteralPath $cudaLicenseRoot) {
+        Copy-Item -Path (Join-Path $cudaLicenseRoot '*') -Destination $licenseDirectory -Force
+    }
+    $cudaManifest = Join-Path (Split-Path -Parent $CudaRedistRoot) 'manifest.json'
+    if (Test-Path -LiteralPath $cudaManifest) {
+        Copy-Item -LiteralPath $cudaManifest -Destination (Join-Path $licenseDirectory 'NVIDIA-redist-manifest.json')
+    }
 }
 
 $checksums = Get-ChildItem -LiteralPath $stage -File -Recurse | ForEach-Object {
@@ -96,7 +115,8 @@ $checksums = Get-ChildItem -LiteralPath $stage -File -Recurse | ForEach-Object {
 }
 $checksums | Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Encoding ASCII
 
-$archive = Join-Path $projectRoot 'dist\SimilarFinder-windows-x64.zip'
+$archiveName = if ($CpuOnly) { 'SimilarFinder-windows-x64-cpu.zip' } else { 'SimilarFinder-windows-x64.zip' }
+$archive = Join-Path $projectRoot ("dist\" + $archiveName)
 if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive -Force
 }

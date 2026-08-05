@@ -4,6 +4,8 @@
 
 #include <QMainWindow>
 
+#include <memory>
+
 class QLabel;
 class QLineEdit;
 class QListView;
@@ -18,6 +20,7 @@ class QSpinBox;
 class QDoubleSpinBox;
 class QThread;
 class QTimer;
+class QTemporaryDir;
 class ResultModel;
 
 namespace sf {
@@ -43,6 +46,7 @@ private:
     void saveSettings() const;
     void chooseDirectory();
     void chooseImage();
+    void pasteImage();
     void setQueryImage(const QString& path);
     void startSearch();
     void setBusy(bool busy, bool building);
@@ -62,7 +66,7 @@ private:
     QProgressBar* progressBar_ = nullptr;
     QLabel* queryPreview_ = nullptr;
     QPushButton* chooseImageButton_ = nullptr;
-    QPushButton* searchButton_ = nullptr;
+    QPushButton* pasteImageButton_ = nullptr;
     QSlider* similaritySlider_ = nullptr;
     QDoubleSpinBox* similaritySpin_ = nullptr;
     QSlider* topSlider_ = nullptr;
@@ -70,6 +74,8 @@ private:
     QListView* resultsView_ = nullptr;
     QTimer* searchDebounce_ = nullptr;
 
+    std::unique_ptr<QTemporaryDir> clipboardDirectory_;
+    int clipboardImageSequence_ = 0;
     QString queryPath_;
     bool catalogBuilt_ = false;
     bool catalogReadOnly_ = false;

@@ -23,6 +23,15 @@
       "environment": {
         "VCPKG_FEATURE_FLAGS": "manifests,binarycaching"
       }
+    },
+    {
+      "name": "windows-msvc-cpu",
+      "displayName": "Windows MSVC x64 CPU-only",
+      "inherits": "windows-msvc",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "SIMILARFINDER_CPU_ONLY": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -30,12 +39,25 @@
       "name": "windows-release",
       "configurePreset": "windows-msvc",
       "configuration": "Release"
+    },
+    {
+      "name": "windows-release-cpu",
+      "configurePreset": "windows-msvc-cpu",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
     {
       "name": "windows-release",
       "configurePreset": "windows-msvc",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-release-cpu",
+      "configurePreset": "windows-msvc-cpu",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

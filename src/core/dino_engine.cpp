@@ -71,6 +71,7 @@ struct DinoEngine::Impl {
         options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
         options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
         options.DisableMemPattern();
+#ifndef SIMILARFINDER_CPU_ONLY
         if (useCuda) {
             OrtCUDAProviderOptions cudaOptions{};
             cudaOptions.device_id = 0;
@@ -79,6 +80,11 @@ struct DinoEngine::Impl {
             cudaOptions.do_copy_in_default_stream = 1;
             options.AppendExecutionProvider_CUDA(cudaOptions);
         }
+#else
+        if (useCuda) {
+            throw std::logic_error("CUDA is disabled in this build");
+        }
+#endif
 #ifdef _WIN32
         session = std::make_unique<Ort::Session>(environment, modelPath.toStdWString().c_str(), options);
 #else
@@ -167,10 +173,14 @@ bool DinoEngine::initialize(
     if (!impl_->verifyModel(manifestPath, errorMessage)) {
         return false;
     }
+    bool requestCuda = preferCuda;
+#ifdef SIMILARFINDER_CPU_ONLY
+    requestCuda = false;
+#endif
     try {
-        impl_->createSession(preferCuda);
+        impl_->createSession(requestCuda);
     } catch (const std::exception& cudaError) {
-        if (!preferCuda) {
+        if (!requestCuda) {
             *errorMessage = QString::fromUtf8(cudaError.what());
             return false;
         }

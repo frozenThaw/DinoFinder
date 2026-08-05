@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "model": "facebook/dinov2-small",
+  "sha256": "059ef0920cdcde9de0b9efe731033a88fcdf76520bcf97b1bfcab5d26b6ebdb9",
+  "input_name": "pixel_values",
+  "output_name": "cls_embedding",
+  "image_size": 224,
+  "dimension": 384,
+  "opset": 18,
+  "dtype": "float32",
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "validation_max_abs_error": 1.7434358596801758e-05,
+  "validation_min_cosine": 1.0
+}

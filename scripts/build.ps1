@@ -1,6 +1,7 @@
 param(
     [string]$DependencyRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) '.deps'),
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$CpuOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,13 +53,21 @@ $env:NINJA_EXE = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\CMake
 $env:CMAKE_TOOLCHAIN_FILE = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
 $env:CXX = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64\cl.exe'
 
-$buildDirectory = Join-Path $projectRoot 'build\windows-msvc'
+$configurePreset = 'windows-msvc'
+$buildPreset = 'windows-release'
+$testPreset = 'windows-release'
+if ($CpuOnly) {
+    $configurePreset = 'windows-msvc-cpu'
+    $buildPreset = 'windows-release-cpu'
+    $testPreset = 'windows-release-cpu'
+}
+$buildDirectory = Join-Path $projectRoot ("build\" + $configurePreset)
 if ($Clean -and (Test-Path -LiteralPath $buildDirectory)) {
     Remove-Item -LiteralPath $buildDirectory -Recurse -Force
 }
-& $cmake --preset windows-msvc --fresh
+& $cmake --preset $configurePreset --fresh
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed with exit code $LASTEXITCODE" }
-& $cmake --build --preset windows-release --parallel
+& $cmake --build --preset $buildPreset --parallel
 if ($LASTEXITCODE -ne 0) { throw "CMake build failed with exit code $LASTEXITCODE" }
-& $ctest --preset windows-release
+& $ctest --preset $testPreset
 if ($LASTEXITCODE -ne 0) { throw "CTest failed with exit code $LASTEXITCODE" }

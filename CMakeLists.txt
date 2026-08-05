@@ -13,6 +13,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 option(SIMILARFINDER_BUILD_TESTS "Build SimilarFinder C++ tests" ON)
+option(SIMILARFINDER_CPU_ONLY "Build without CUDA provider support" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -67,6 +68,9 @@ target_compile_definitions(similarfinder_core
         QT_NO_KEYWORDS
         SIMILARFINDER_VERSION="${PROJECT_VERSION}"
 )
+if(SIMILARFINDER_CPU_ONLY)
+    target_compile_definitions(similarfinder_core PUBLIC SIMILARFINDER_CPU_ONLY=1)
+endif()
 
 add_executable(SimilarFinder WIN32
     src/app/main.cpp
@@ -93,11 +97,14 @@ add_custom_command(TARGET SimilarFinder POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/models/dinov2_vits14_manifest.json"
         "$<TARGET_FILE_DIR:SimilarFinder>/models/dinov2_vits14_manifest.json"
 )
-similarfinder_copy_runtime_dlls(SimilarFinder
-    "${ONNXRuntime_DLL}"
-    "${ONNXRuntime_PROVIDERS_SHARED_DLL}"
-    "${ONNXRuntime_PROVIDERS_CUDA_DLL}"
-)
+set(similarfinder_onnx_runtime_dlls "${ONNXRuntime_DLL}")
+if(NOT SIMILARFINDER_CPU_ONLY)
+    list(APPEND similarfinder_onnx_runtime_dlls
+        "${ONNXRuntime_PROVIDERS_SHARED_DLL}"
+        "${ONNXRuntime_PROVIDERS_CUDA_DLL}"
+    )
+endif()
+similarfinder_copy_runtime_dlls(SimilarFinder ${similarfinder_onnx_runtime_dlls})
 
 if(MSVC)
     foreach(target similarfinder_core SimilarFinder)
